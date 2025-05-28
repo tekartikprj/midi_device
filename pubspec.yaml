@@ -7,4 +7,5 @@ workspace:
   - packages/midi_device
   - packages/midi_device_alsa_linux
   - example/midi_device_example
+  - packages/midi_device_flutter_command
 

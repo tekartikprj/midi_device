@@ -53,7 +53,11 @@ dependencies:
       url: https://github.com/tekaly/festenao
       ref: dart3a
       path: packages/festenao_common
-
+  tekartik_midi_device_flutter_command:
+    git:
+      url: https://github.com/tekartikprj/midi_device
+      path: packages/midi_device_flutter_command
+      ref: dart3a
 dev_dependencies:
   flutter_test:
     sdk: flutter
