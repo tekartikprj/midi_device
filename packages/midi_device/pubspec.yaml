@@ -1,0 +1,25 @@
+name: tekartik_midi_device
+description: Midi device abstraction
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.7.0
+
+# Add regular dependencies here.
+dependencies:
+  tekartik_common_utils:
+    git:
+      url: https://github.com/tekartik/common_utils.dart
+      ref: dart3a
+  tekartik_app_rx:
+    git:
+      url: https://github.com/tekartik/app_common_utils.dart
+      ref: dart3a
+      path: app_rx
+  # path: ^1.8.0
+
+dev_dependencies:
+  lints: ">=5.0.0"
+  test: ">=1.24.0"
+resolution: workspace

@@ -1,0 +1,41 @@
+name: tekartik_alsa_midi_linux
+description: A Dart binding to ALSA midi using FFI
+version: 0.1.0
+homepage: https://github.com/maks/dart_midi
+publish_to: none
+environment:
+  sdk: ^3.7.0
+
+# Supports only Linux
+platforms:
+  linux:
+
+dependencies:
+  ffi: ">=2.0.2"
+  tekartik_lints:
+    git:
+      url: https://github.com/tekartik/common.dart
+      ref: dart3a
+      path: packages/lints
+  tuple: ">=2.0.0"
+
+dev_dependencies:
+  ffigen: ">=8.0.2"
+  lints: ">=5.0.0"
+  test: ">=1.24.0"
+
+ffigen:
+  name: "ALSA"
+  output: "lib/alsa_generated_bindings.dart"
+  headers:
+    entry-points:
+      - "/usr/include/alsa/asoundlib.h"
+  compiler-opts: "-I/usr/lib/llvm-11/include/ -L/usr/lib/llvm-11/lib/
+    -I/usr/local/opt/llvm/include/ -Wno-nullability-completeness"
+  structs:
+    rename:
+      "_(.*)": "$1_"
+    member-rename:
+      ".*":
+        "_(.*)": "$1_"
+resolution: workspace

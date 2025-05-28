@@ -1,0 +1,16 @@
+# Defines a default set of lint rules enforced for projects at Google. For
+# details and rationale, see
+# https://github.com/dart-lang/pedantic#enabled-lints.
+
+include: package:tekartik_lints/package.yaml
+
+# For lint rules and documentation, see http://dart-lang.github.io/linter/lints.
+
+linter:
+  rules:
+    camel_case_types: false
+    omit_local_variable_types: false
+    public_member_api_docs: false
+analyzer:
+  exclude:
+    - lib/alsa_generated_bindings.dart

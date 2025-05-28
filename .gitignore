@@ -25,3 +25,14 @@ doc/api/
 
 .flutter-plugins
 .flutter-plugins-dependencies
+
+.*
+*.iml
+pubspec_overrides.yaml
+
+linux/
+windows/
+macos/
+ios/
+web/
+android/

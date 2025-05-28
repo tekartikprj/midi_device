@@ -1,0 +1,10 @@
+name: _
+publish_to: none
+environment:
+  sdk: ^3.7.0
+workspace:
+  - packages/alsa_midi_linux
+  - packages/midi_device
+  - packages/midi_device_alsa_linux
+  - example/midi_device_example
+
