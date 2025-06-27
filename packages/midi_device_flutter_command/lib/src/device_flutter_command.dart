@@ -83,13 +83,12 @@ class _MidiDeviceManagerFlutterCommand implements MidiDeviceManager {
         'FLUTTERCOMMAND devices: ${flutterCommandDevices.map((d) => d.toDictionary)}',
       );
     }
-    return _lastDevices =
-        flutterCommandDevices
-            .map(
-              (flutterCommandDevice) =>
-                  _MidiDeviceFlutterCommand(this, flutterCommandDevice),
-            )
-            .toList();
+    return _lastDevices = flutterCommandDevices
+        .map(
+          (flutterCommandDevice) =>
+              _MidiDeviceFlutterCommand(this, flutterCommandDevice),
+        )
+        .toList();
   }
 }
 
@@ -197,14 +196,13 @@ class _ConnectedMidiDeviceFlutterCommand implements ConnectedMidiDevice {
   }
 
   BroadcastStream<MidiMessage>? _onMessageReceivedControllerOrNull;
-  late final _onMessageReceived =
-      fmcMidiCommand.onMidiDataReceived!
-          .where((packet) => packet.device.id == id)
-          .map(
-            (flutterCommandMidiMessage) =>
-                _MidiMessageFlutterCommand(this, flutterCommandMidiMessage),
-          )
-          .toBroadcastStream();
+  late final _onMessageReceived = fmcMidiCommand.onMidiDataReceived!
+      .where((packet) => packet.device.id == id)
+      .map(
+        (flutterCommandMidiMessage) =>
+            _MidiMessageFlutterCommand(this, flutterCommandMidiMessage),
+      )
+      .toBroadcastStream();
   @override
   Stream<MidiMessage> get onMessageReceived =>
       (_onMessageReceivedControllerOrNull ??= _onMessageReceived);

@@ -202,8 +202,9 @@ class AlsaMidiDevice {
     outPort = calloc<Pointer<a.snd_rawmidi_>>();
     inPort = calloc<Pointer<a.snd_rawmidi_>>();
 
-    Pointer<Char> name =
-        '${hardwareId(cardId, deviceId)},0'.toNativeUtf8().cast<Char>();
+    Pointer<Char> name = '${hardwareId(cardId, deviceId)},0'
+        .toNativeUtf8()
+        .cast<Char>();
     //print('open out port ${stringFromNative(name)}');
     var status = 0;
     if ((status = alsa.snd_rawmidi_open(
