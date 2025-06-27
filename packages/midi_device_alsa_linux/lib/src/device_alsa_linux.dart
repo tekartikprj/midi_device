@@ -76,10 +76,9 @@ class _MidiDeviceManagerAlsaLinux implements MidiDeviceManager {
     if (midiDeviceManagerAlsaLinuxDebug) {
       _log('ALSA devices: ${alsaDevices.map((d) => d.toDictionary)}');
     }
-    return _lastDevices =
-        alsaDevices
-            .map((alsaDevice) => _MidiDeviceAlsaLinux(this, alsaDevice))
-            .toList();
+    return _lastDevices = alsaDevices
+        .map((alsaDevice) => _MidiDeviceAlsaLinux(this, alsaDevice))
+        .toList();
   }
 }
 
@@ -176,12 +175,9 @@ class _ConnectedMidiDeviceAlsaLinux implements ConnectedMidiDevice {
   }
 
   BroadcastStream<MidiMessage>? _onMessageReceivedControllerOrNull;
-  late final _onMessageReceived =
-      _midiDevice._alsaMidiDevice.receivedMessages
-          .map(
-            (alsaMidiMessage) => _MidiMessageAlsaLinux(this, alsaMidiMessage),
-          )
-          .toBroadcastStream();
+  late final _onMessageReceived = _midiDevice._alsaMidiDevice.receivedMessages
+      .map((alsaMidiMessage) => _MidiMessageAlsaLinux(this, alsaMidiMessage))
+      .toBroadcastStream();
   @override
   Stream<MidiMessage> get onMessageReceived =>
       (_onMessageReceivedControllerOrNull ??= _onMessageReceived);
