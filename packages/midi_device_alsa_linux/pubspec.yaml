@@ -13,20 +13,16 @@ dependencies:
     git:
       url: https://github.com/tekartikprj/midi_device
       path: packages/midi_device
-      ref: dart3a
   tekartik_alsa_midi_linux:
     git:
       url: https://github.com/tekartikprj/midi_device
       path: packages/alsa_midi_linux
-      ref: dart3a
   tekartik_common_utils:
     git:
       url: https://github.com/tekartik/common_utils.dart
-      ref: dart3a
   tekartik_app_rx:
     git:
       url: https://github.com/tekartik/app_common_utils.dart
-      ref: dart3a
       path: app_rx
 dev_dependencies:
   lints: ">=5.0.0"

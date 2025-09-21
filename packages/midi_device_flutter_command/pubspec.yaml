@@ -14,17 +14,14 @@ dependencies:
   tekartik_app_rx:
     git:
       url: https://github.com/tekartik/app_common_utils.dart
-      ref: dart3a
       path: app_rx
   tekartik_common_utils:
     git:
       url: https://github.com/tekartik/common_utils.dart
-      ref: dart3a
   tekartik_midi_device:
     git:
       url: https://github.com/tekartikprj/midi_device
       path: packages/midi_device
-      ref: dart3a
 dev_dependencies:
   flutter_test:
     sdk: flutter

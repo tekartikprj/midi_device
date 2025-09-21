@@ -15,7 +15,6 @@ dependencies:
   tekartik_lints:
     git:
       url: https://github.com/tekartik/common.dart
-      ref: dart3a
       path: packages/lints
   tuple: ">=2.0.0"
 

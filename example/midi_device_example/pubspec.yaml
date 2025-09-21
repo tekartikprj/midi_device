@@ -34,30 +34,25 @@ dependencies:
     git:
       url: https://github.com/tekartikprj/midi_device
       path: packages/midi_device_alsa_linux
-      ref: dart3a
   tekartik_midi_device:
     git:
       url: https://github.com/tekartikprj/midi_device
       path: packages/midi_device
-      ref: dart3a
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ">=1.0.8"
   festenao_common_flutter:
     git:
       url: https://github.com/tekaly/festenao
-      ref: dart3a
       path: packages_flutter/festenao_common_flutter
   festenao_common:
     git:
       url: https://github.com/tekaly/festenao
-      ref: dart3a
       path: packages/festenao_common
   tekartik_midi_device_flutter_command:
     git:
       url: https://github.com/tekartikprj/midi_device
       path: packages/midi_device_flutter_command
-      ref: dart3a
 dev_dependencies:
   flutter_test:
     sdk: flutter
