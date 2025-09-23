@@ -27,6 +27,7 @@ doc/api/
 .flutter-plugins-dependencies
 
 .*
+!.gitignore
 *.iml
 pubspec_overrides.yaml
 
