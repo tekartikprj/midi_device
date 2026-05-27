@@ -85,7 +85,9 @@ void _rxIsolate(Tuple2<SendPort, int> args) {
         print(
           'Problem reading MIDI input status: $status => ${stringFromNative(alsa.snd_strerror(status))}',
         );
-        throw 'Problem reading MIDI input: status = $status => ${stringFromNative(alsa.snd_strerror(status))}';
+        throw StateError(
+          'Problem reading MIDI input: status = $status => ${stringFromNative(alsa.snd_strerror(status))}',
+        );
       }
     } else {
       // print('rx byte [${rxBuffer.length}]: ${buffer.value.toRadixString(16)}');
