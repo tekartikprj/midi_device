@@ -80,7 +80,7 @@ class _MidiDeviceManagerFlutterCommand implements MidiDeviceManager {
         (await fmcMidiCommand.devices) ?? <fmc.MidiDevice>[];
     if (midiDeviceManagerFlutterCommandDebug) {
       _log(
-        'FLUTTERCOMMAND devices: ${flutterCommandDevices.map((d) => d.toDictionary)}',
+        'FLUTTERCOMMAND devices: ${flutterCommandDevices.map((d) => d.toDebugString()).toList()}',
       );
     }
     return _lastDevices = flutterCommandDevices
@@ -97,6 +97,12 @@ extension on MidiDevice {
 
   fmc.MidiDevice get flutterCommandMidiDevice =>
       _self._flutterCommandMidiDevice;
+}
+
+extension on fmc.MidiDevice {
+  String toDebugString() {
+    return '$id: $name ($type), in: ${inputPorts.length}, out: ${outputPorts.length}, connected: $connected';
+  }
 }
 
 class _MidiDeviceFlutterCommand implements MidiDevice {
@@ -137,7 +143,7 @@ class _MidiDeviceFlutterCommand implements MidiDevice {
 
 class _MidiMessageFlutterCommand implements MidiMessage {
   final _ConnectedMidiDeviceFlutterCommand _midiDevice;
-  final fmc.MidiPacket _flutterCommandMidiMessage;
+  final fmc.MidiDataReceivedEvent _flutterCommandMidiMessage;
 
   _MidiMessageFlutterCommand(this._midiDevice, this._flutterCommandMidiMessage);
 
@@ -145,7 +151,7 @@ class _MidiMessageFlutterCommand implements MidiMessage {
   int get timestamp => _flutterCommandMidiMessage.timestamp;
 
   @override
-  Uint8List get data => _flutterCommandMidiMessage.data;
+  Uint8List get data => _flutterCommandMidiMessage.message.data;
 
   @override
   ConnectedMidiDevice get device => _midiDevice;

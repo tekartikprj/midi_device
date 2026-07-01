@@ -15,7 +15,7 @@ void _log(Object message) {
 }
 
 /// Midi device manager for ALSA on Linux
-MidiDeviceManager get midiDeviceManagerAlsaLinux =>
+MidiDeviceManager get midiDeviceManagerAlsaLinuxImpl =>
     _MidiDeviceManagerAlsaLinux();
 
 class _MidiDeviceManagerAlsaLinux implements MidiDeviceManager {
