@@ -1,6 +1,4 @@
-/// Support for doing something awesome.
-///
-/// More dartdocs go here.
+/// MIDI device access, connection, and message abstraction.
 library;
 
 export 'src/connected_device.dart'
