@@ -12,6 +12,7 @@ import 'package:tekartik_alsa_midi_linux/midi.dart';
 import 'package:tuple/tuple.dart';
 
 import 'alsa_generated_bindings.dart' as a;
+import 'src/midi_byte_parser.dart';
 
 final alsa = a.ALSA(DynamicLibrary.open('libasound.so.2'));
 
@@ -25,43 +26,9 @@ String stringFromNative(Pointer<Char> pointer) {
   return pointer.cast<Utf8>().toDartString();
 }
 
-int lengthOfMessageType(int type) {
-  int midiType = type & 0xF0;
-
-  switch (type) {
-    case 0xF6:
-    case 0xF8:
-    case 0xFA:
-    case 0xFB:
-    case 0xFC:
-    case 0xFF:
-    case 0xFE:
-      return 1;
-    case 0xF1:
-    case 0xF3:
-      return 2;
-    default:
-      break;
-  }
-
-  switch (midiType) {
-    case 0xC0:
-    case 0xD0:
-      return 2;
-    case 0xF2:
-    case 0x80:
-    case 0x90:
-    case 0xA0:
-    case 0xB0:
-    case 0xE0:
-      return 3;
-    case 0xF0:
-      return -1;
-    default:
-      break;
-  }
-  return 0;
-}
+/// Length of the message started by a status byte: 1 to 3, -1 for a sysex,
+/// 0 for a data byte or an undefined status.
+int lengthOfMessageType(int type) => midiStatusLength(type);
 
 void _rxIsolate(Tuple2<SendPort, int> args) {
   final sendPort = args.item1;
@@ -72,11 +39,9 @@ void _rxIsolate(Tuple2<SendPort, int> args) {
   //print('start isolate $sendPort, $inPort, ${args.item2}');
 
   int status = 0;
-  int msgLength = 0;
   //TODO: use a larger buffer than 1 byte, as 1 byte is likely very inefficient
   Pointer<Uint8> buffer = calloc<Uint8>();
-  List<int> rxBuffer = [];
-  bool isSysex = false;
+  final parser = MidiByteParser();
 
   // The port is non-blocking, poll its descriptors to wait for data.
   final pollCount = max(alsa.snd_rawmidi_poll_descriptors_count(inPort), 0);
@@ -106,26 +71,8 @@ void _rxIsolate(Tuple2<SendPort, int> args) {
         );
       }
     } else {
-      // print('rx byte [${rxBuffer.length}]: ${buffer.value.toRadixString(16)}');
-      if (rxBuffer.isEmpty) {
-        msgLength = lengthOfMessageType(buffer.value);
-        // print('msg len:$msgLength');
-        if (msgLength == -1) {
-          isSysex = true;
-        }
-      }
-
-      rxBuffer.add(buffer.value);
-
-      if (rxBuffer.length == msgLength) {
-        // print('recv buffer $rxBuffer $msgLength');
-        sendPort.send(Uint8List.fromList(rxBuffer));
-        rxBuffer.clear();
-      } else if (isSysex && buffer.value == 0xF7) {
-        // print('recv SYSEX buffer $rxBuffer');
-        sendPort.send(Uint8List.fromList(rxBuffer));
-        rxBuffer.clear();
-        isSysex = false;
+      for (var message in parser.add(buffer.value)) {
+        sendPort.send(message);
       }
     }
   }
