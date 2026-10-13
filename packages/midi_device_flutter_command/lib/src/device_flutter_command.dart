@@ -69,8 +69,9 @@ class _MidiDeviceManagerFlutterCommand implements MidiDeviceManager {
       if (!flutterCommandDevice.connected) {
         throw Exception('Failed to connect to device with id $deviceId');
       }
-      addConnectedDevice(_ConnectedMidiDeviceFlutterCommand(device._self));
-      return _ConnectedMidiDeviceFlutterCommand(device._self);
+      var newConnectedDevice = _ConnectedMidiDeviceFlutterCommand(device._self);
+      addConnectedDevice(newConnectedDevice);
+      return newConnectedDevice;
     }
   }
 

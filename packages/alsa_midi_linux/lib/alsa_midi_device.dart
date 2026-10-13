@@ -2,7 +2,9 @@
 
 import 'dart:async';
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:isolate';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
@@ -76,11 +78,25 @@ void _rxIsolate(Tuple2<SendPort, int> args) {
   List<int> rxBuffer = [];
   bool isSysex = false;
 
+  // The port is non-blocking, poll its descriptors to wait for data.
+  final pollCount = max(alsa.snd_rawmidi_poll_descriptors_count(inPort), 0);
+  final pollFds = calloc<a.pollfd>(max(pollCount, 1));
+  final pollFdCount = pollCount > 0
+      ? alsa.snd_rawmidi_poll_descriptors(inPort, pollFds, pollCount)
+      : 0;
+
   while (true) {
     if ((status = alsa.snd_rawmidi_read(inPort, buffer.cast(), 1)) < 0) {
       if (status == SND_ERROR_EAGAIN) {
         // We have this error in non-blocking mode when the read buffer is empty
-        continue; // No data available, wait for next read
+        // Wait for data instead of spinning, with a timeout so that the
+        // isolate can be killed.
+        if (pollFdCount > 0) {
+          alsa.poll(pollFds, pollFdCount, 100);
+        } else {
+          sleep(const Duration(milliseconds: 1));
+        }
+        continue; // Data available (or timeout), read again
       } else {
         print(
           'Problem reading MIDI input status: $status => ${stringFromNative(alsa.snd_strerror(status))}',
@@ -131,6 +147,8 @@ class AlsaMidiDevice {
   ReceivePort? errorPort;
   ReceivePort? receivePort;
 
+  /// Card control, only open while [getDevices] enumerates the card
+  /// ([nullptr] afterwards).
   Pointer<a.snd_ctl_> ctl;
 
   String type;
@@ -160,44 +178,50 @@ class AlsaMidiDevice {
     // Fetch device info
     var info = calloc<Pointer<a.snd_rawmidi_info_>>();
     alsa.snd_rawmidi_info_malloc(info);
-    alsa.snd_rawmidi_info_set_device(info.value, deviceId);
+    try {
+      alsa.snd_rawmidi_info_set_device(info.value, deviceId);
 
-    var status = alsa.snd_ctl_rawmidi_info(ctl, info.value);
-    if (status < 0) {
-      print(
-        'error: cannot get device info.value ${alsa.snd_strerror(status).cast<Utf8>().toDartString()}',
-      );
-      return;
-    }
-
-    // Get input ports
-    alsa.snd_rawmidi_info_set_stream(info.value, SND_RAWMIDI_STREAM_INPUT);
-    status = alsa.snd_ctl_rawmidi_info(ctl, info.value);
-    final inCount = alsa.snd_rawmidi_info_get_subdevices_count(info.value);
-    for (var i = 0; i < inCount; i++) {
-      if (alsa.snd_rawmidi_info_get_subdevice(info.value) < 0) {
+      var status = alsa.snd_ctl_rawmidi_info(ctl, info.value);
+      if (status < 0) {
         print(
-          'error: snd_rawmidi_info_get_subdevice in [$i] $status ${alsa.snd_rawmidi_info_get_subdevice_name(info.value).cast<Utf8>().toDartString()}',
+          'error: cannot get device info.value ${alsa.snd_strerror(status).cast<Utf8>().toDartString()}',
         );
-      } else {
-        _inputPorts.add('$i');
+        return;
       }
-    }
 
-    // Get output ports
-    alsa.snd_rawmidi_info_set_stream(info.value, SND_RAWMIDI_STREAM_OUTPUT);
-    status = alsa.snd_ctl_rawmidi_info(ctl, info.value);
-    final outCount = alsa.snd_rawmidi_info_get_subdevices_count(info.value);
-    for (var i = 0; i < outCount; i++) {
-      if (alsa.snd_rawmidi_info_get_subdevice(info.value) < 0) {
-        print(
-          'error: snd_rawmidi_info_get_subdevice out [$i] $status ${alsa.snd_rawmidi_info_get_subdevice_name(info.value).cast<Utf8>().toDartString()}',
-        );
-      } else {
-        _outputPorts.add('$i');
+      // Get input ports
+      alsa.snd_rawmidi_info_set_stream(info.value, SND_RAWMIDI_STREAM_INPUT);
+      status = alsa.snd_ctl_rawmidi_info(ctl, info.value);
+      final inCount = alsa.snd_rawmidi_info_get_subdevices_count(info.value);
+      for (var i = 0; i < inCount; i++) {
+        if (alsa.snd_rawmidi_info_get_subdevice(info.value) < 0) {
+          print(
+            'error: snd_rawmidi_info_get_subdevice in [$i] $status ${alsa.snd_rawmidi_info_get_subdevice_name(info.value).cast<Utf8>().toDartString()}',
+          );
+        } else {
+          _inputPorts.add('$i');
+        }
       }
+
+      // Get output ports
+      alsa.snd_rawmidi_info_set_stream(info.value, SND_RAWMIDI_STREAM_OUTPUT);
+      status = alsa.snd_ctl_rawmidi_info(ctl, info.value);
+      final outCount = alsa.snd_rawmidi_info_get_subdevices_count(info.value);
+      for (var i = 0; i < outCount; i++) {
+        if (alsa.snd_rawmidi_info_get_subdevice(info.value) < 0) {
+          print(
+            'error: snd_rawmidi_info_get_subdevice out [$i] $status ${alsa.snd_rawmidi_info_get_subdevice_name(info.value).cast<Utf8>().toDartString()}',
+          );
+        } else {
+          _outputPorts.add('$i');
+        }
+      }
+    } finally {
+      if (info.value != nullptr) {
+        alsa.snd_rawmidi_info_free(info.value);
+      }
+      calloc.free(info);
     }
-    calloc.free(info);
   }
 
   Future<bool> connect() async {
@@ -331,88 +355,120 @@ class AlsaMidiDevice {
     int status;
     var card = calloc<Int>();
     card.value = -1;
-    Pointer<Pointer<Char>> shortname = calloc<Pointer<Char>>();
 
     List<AlsaMidiDevice> devices = [];
 
-    if ((status = alsa.snd_card_next(card)) < 0) {
-      print(
-        'error: cannot determine card number $card ${stringFromNative(alsa.snd_strerror(status))}',
-      );
-      return [];
-    }
-    // print('status $status');
-    if (card.value < 0) {
-      print('error: no sound cards found');
-      return [];
-    }
-
-    while (card.value >= 0) {
-      Pointer<Char> name = 'hw:${card.value}'.toNativeUtf8().cast<Char>();
-      Pointer<Pointer<a.snd_ctl_>> ctl = calloc<Pointer<a.snd_ctl_>>();
-      Pointer<Int> device = calloc<Int>();
-      device.value = -1;
-
-      // print("card ${card.value}");
-      if ((status = alsa.snd_card_get_name(card.value, shortname)) < 0) {
+    try {
+      if ((status = alsa.snd_card_next(card)) < 0) {
         print(
-          'error: cannot determine card shortname $card ${stringFromNative(alsa.snd_strerror(status))}',
+          'error: cannot determine card number ${card.value} ${stringFromNative(alsa.snd_strerror(status))}',
         );
-        continue;
+        return [];
       }
-      // print('name: ${stringFromNative(shortname.value)}');
-      status = alsa.snd_ctl_open(ctl, name, 0);
-      // print("status after ctl_open $status ctl $ctl ctl.value ${ctl.value}");
-      if (status < 0) {
-        print(
-          'error: cannot open control for card number $card ${stringFromNative(alsa.snd_strerror(status))}',
-        );
-        continue;
+      // print('status $status');
+      if (card.value < 0) {
+        print('error: no sound cards found');
+        return [];
       }
 
-      do {
-        status = alsa.snd_ctl_rawmidi_next_device(ctl.value, device);
-        // print("status $status device.value ${device.value}");
-        if (status < 0) {
+      while (card.value >= 0) {
+        devices.addAll(_getCardDevices(card.value, rxStreamController));
+
+        // Always move to the next card, even if this one failed.
+        if ((status = alsa.snd_card_next(card)) < 0) {
           print(
-            'error: cannot determine device number ${device.value} ${stringFromNative(alsa.snd_strerror(status))}',
+            'error: cannot determine card number ${card.value} ${stringFromNative(alsa.snd_strerror(status))}',
           );
           break;
         }
-
-        if (device.value >= 0) {
-          var deviceId = hardwareId(card.value, device.value);
-          if (!_connectedDevices.containsKey(deviceId)) {
-            // print('add unconnected device with id $deviceId');
-            devices.add(
-              AlsaMidiDevice(
-                ctl.value,
-                card.value,
-                device.value,
-                stringFromNative(shortname.value),
-                'native',
-                rxStreamController,
-              ),
-            );
-          }
-        }
-      } while (device.value > 0);
-
-      if ((status = alsa.snd_card_next(card)) < 0) {
-        print(
-          'error: cannot determine card number $card ${stringFromNative(alsa.snd_strerror(status))}',
-        );
-        break;
       }
-
-      calloc.free(name);
-      calloc.free(ctl);
-      calloc.free(device);
+    } finally {
+      calloc.free(card);
     }
 
     // Add all connected devices
     devices.addAll(_connectedDevices.values);
 
+    return devices;
+  }
+
+  /// The not connected devices of card [cardNumber].
+  ///
+  /// The card control is only open during the enumeration: [ctl] is then
+  /// [nullptr] in the returned devices.
+  static List<AlsaMidiDevice> _getCardDevices(
+    int cardNumber,
+    StreamController<MidiMessage> rxStreamController,
+  ) {
+    int status;
+    List<AlsaMidiDevice> devices = [];
+    Pointer<Pointer<Char>> shortname = calloc<Pointer<Char>>();
+    Pointer<Char> name = 'hw:$cardNumber'.toNativeUtf8().cast<Char>();
+    Pointer<Pointer<a.snd_ctl_>> ctl = calloc<Pointer<a.snd_ctl_>>();
+    Pointer<Int> device = calloc<Int>();
+    device.value = -1;
+    try {
+      // print("card $cardNumber");
+      if ((status = alsa.snd_card_get_name(cardNumber, shortname)) < 0) {
+        print(
+          'error: cannot determine card shortname $cardNumber ${stringFromNative(alsa.snd_strerror(status))}',
+        );
+        return devices;
+      }
+      // Allocated by ALSA (strdup)
+      var cardName = stringFromNative(shortname.value);
+      calloc.free(shortname.value);
+      // print('name: $cardName');
+      status = alsa.snd_ctl_open(ctl, name, 0);
+      // print("status after ctl_open $status ctl $ctl ctl.value ${ctl.value}");
+      if (status < 0) {
+        print(
+          'error: cannot open control for card number $cardNumber ${stringFromNative(alsa.snd_strerror(status))}',
+        );
+        return devices;
+      }
+
+      try {
+        do {
+          status = alsa.snd_ctl_rawmidi_next_device(ctl.value, device);
+          // print("status $status device.value ${device.value}");
+          if (status < 0) {
+            print(
+              'error: cannot determine device number ${device.value} ${stringFromNative(alsa.snd_strerror(status))}',
+            );
+            break;
+          }
+
+          if (device.value >= 0) {
+            var deviceId = hardwareId(cardNumber, device.value);
+            if (!_connectedDevices.containsKey(deviceId)) {
+              // print('add unconnected device with id $deviceId');
+              devices.add(
+                AlsaMidiDevice(
+                  ctl.value,
+                  cardNumber,
+                  device.value,
+                  cardName,
+                  'native',
+                  rxStreamController,
+                ),
+              );
+            }
+          }
+          // -1 when there is no more device
+        } while (device.value >= 0);
+      } finally {
+        alsa.snd_ctl_close(ctl.value);
+        for (var alsaDevice in devices) {
+          alsaDevice.ctl = nullptr;
+        }
+      }
+    } finally {
+      calloc.free(shortname);
+      calloc.free(name);
+      calloc.free(ctl);
+      calloc.free(device);
+    }
     return devices;
   }
 

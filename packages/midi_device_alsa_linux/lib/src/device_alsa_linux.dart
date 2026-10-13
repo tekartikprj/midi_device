@@ -65,8 +65,9 @@ class _MidiDeviceManagerAlsaLinux implements MidiDeviceManager {
       if (!alsaDevice.connected) {
         throw Exception('Failed to connect to device with id $deviceId');
       }
-      addConnectedDevice(_ConnectedMidiDeviceAlsaLinux(device._self));
-      return _ConnectedMidiDeviceAlsaLinux(device._self);
+      var newConnectedDevice = _ConnectedMidiDeviceAlsaLinux(device._self);
+      addConnectedDevice(newConnectedDevice);
+      return newConnectedDevice;
     }
   }
 
@@ -175,7 +176,10 @@ class _ConnectedMidiDeviceAlsaLinux implements ConnectedMidiDevice {
   }
 
   BroadcastStream<MidiMessage>? _onMessageReceivedControllerOrNull;
+
+  /// The ALSA devices of one enumeration share the same stream, keep ours.
   late final _onMessageReceived = _midiDevice._alsaMidiDevice.receivedMessages
+      .where((alsaMidiMessage) => alsaMidiMessage.device.hwrId == id)
       .map((alsaMidiMessage) => _MidiMessageAlsaLinux(this, alsaMidiMessage))
       .toBroadcastStream();
   @override
