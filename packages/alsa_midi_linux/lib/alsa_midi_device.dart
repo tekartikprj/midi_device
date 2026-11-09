@@ -14,6 +14,7 @@ import 'package:tuple/tuple.dart';
 import 'alsa_generated_bindings.dart' as a;
 import 'src/midi_byte_parser.dart';
 
+/// The ALSA bindings, on `libasound.so.2` (opened on first use: Linux only).
 final alsa = a.ALSA(DynamicLibrary.open('libasound.so.2'));
 
 final int SND_RAWMIDI_STREAM_INPUT = 1;
@@ -78,42 +79,71 @@ void _rxIsolate(Tuple2<SendPort, int> args) {
   }
 }
 
+/// An ALSA raw MIDI device (`hw:<card>,<device>`), from [getDevices].
+///
+/// [connect] opens it (input and output) and starts a receive isolate,
+/// [send] writes bytes, [receivedMessages] gives the complete messages
+/// received, [disconnect] closes it.
 class AlsaMidiDevice {
   static final Map<String, AlsaMidiDevice> _connectedDevices =
       <String, AlsaMidiDevice>{};
   static final StreamController<AlsaMidiDevice> _disconnectStreamCtrl =
       StreamController.broadcast();
+
+  /// The devices that [disconnect] closed (a call, or a read error such as
+  /// an unplug).
   static Stream<AlsaMidiDevice> get onDeviceDisconnected =>
       _disconnectStreamCtrl.stream.asBroadcastStream();
 
+  /// The output handle once connected, null otherwise.
   Pointer<Pointer<a.snd_rawmidi_>>? outPort;
+
+  /// The input handle once connected, null otherwise.
   Pointer<Pointer<a.snd_rawmidi_>>? inPort;
   final StreamController<MidiMessage> _rxStreamCtrl;
   Isolate? _isolate;
 
+  /// The receive isolate's errors, while connected.
   ReceivePort? errorPort;
+
+  /// The receive isolate's messages, while connected.
   ReceivePort? receivePort;
 
   /// Card control, only open while [getDevices] enumerates the card
   /// ([nullptr] afterwards).
   Pointer<a.snd_ctl_> ctl;
 
+  /// Always `'native'`.
   String type;
+
+  /// The ALSA card number.
   int cardId;
+
+  /// The raw MIDI device number on the card.
   int deviceId;
 
+  /// Whether [connect] opened it (until [disconnect]).
   bool connected = false;
 
+  /// The card's name (the devices of one card share it).
   String name;
 
+  /// The complete messages received while connected (broadcast). The
+  /// devices of one [getDevices] call share this stream: filter on
+  /// [MidiMessage.device] when several are connected.
   Stream<MidiMessage> get receivedMessages => _rxStreamCtrl.stream;
 
   final List<String> _inputPorts = [];
   final List<String> _outputPorts = [];
 
+  /// The input subdevices, `'0'` to `'n-1'`.
   List<String> get inputPorts => _inputPorts;
+
+  /// The output subdevices, `'0'` to `'n-1'`.
   List<String> get outputPorts => _outputPorts;
 
+  /// A device of card [cardId] read through its control [ctl]; use
+  /// [getDevices] instead.
   AlsaMidiDevice(
     this.ctl,
     this.cardId,
@@ -171,27 +201,42 @@ class AlsaMidiDevice {
     }
   }
 
+  /// Opens the device (input and output, non-blocking) and starts
+  /// receiving: true when connected. False, without throwing, when it
+  /// cannot be opened (busy in another program, gone): the device is then
+  /// left as it was.
   Future<bool> connect() async {
-    outPort = calloc<Pointer<a.snd_rawmidi_>>();
-    inPort = calloc<Pointer<a.snd_rawmidi_>>();
+    // The ports are only kept once open: after a failed open they hold NULL
+    // handles, and ALSA aborts the process on a NULL handle (send,
+    // disconnect).
+    final newOutPort = calloc<Pointer<a.snd_rawmidi_>>();
+    final newInPort = calloc<Pointer<a.snd_rawmidi_>>();
 
     Pointer<Char> name = '${hardwareId(cardId, deviceId)},0'
         .toNativeUtf8()
         .cast<Char>();
     //print('open out port ${stringFromNative(name)}');
     var status = 0;
-    if ((status = alsa.snd_rawmidi_open(
-          inPort!,
-          outPort!,
-          name,
-          a.SND_RAWMIDI_NONBLOCK,
-        )) <
-        0) {
+    try {
+      status = alsa.snd_rawmidi_open(
+        newInPort,
+        newOutPort,
+        name,
+        a.SND_RAWMIDI_NONBLOCK,
+      );
+    } finally {
+      calloc.free(name);
+    }
+    if (status < 0) {
+      calloc.free(newOutPort);
+      calloc.free(newInPort);
       print(
         'error: cannot open card number $cardId ${stringFromNative(alsa.snd_strerror(status))}',
       );
       return false;
     }
+    outPort = newOutPort;
+    inPort = newInPort;
 
     connected = true;
 
@@ -224,12 +269,20 @@ class AlsaMidiDevice {
     return true;
   }
 
+  /// Writes [midiMessage] (whole messages, status byte first, e.g.
+  /// `[0x90, 60, 100]`). Errors are printed, not thrown (nothing is sent
+  /// when not connected). The output is non-blocking: a message longer than
+  /// the free space of the ALSA output buffer (4096 bytes by default) is
+  /// cut.
   void send(Uint8List midiMessage) {
     final buffer = calloc<Uint8>(midiMessage.lengthInBytes);
-    for (var i = 0; i < midiMessage.length; i++) {
-      buffer[i] = midiMessage[i];
+    try {
+      buffer.asTypedList(midiMessage.length).setAll(0, midiMessage);
+      // snd_rawmidi_write copies the bytes: the buffer can go after it.
+      _send(buffer, midiMessage.length);
+    } finally {
+      calloc.free(buffer);
     }
-    _send(buffer, midiMessage.length);
   }
 
   void _send(Pointer<Uint8> buffer, int length) {
@@ -252,6 +305,9 @@ class AlsaMidiDevice {
     }
   }
 
+  /// Stops receiving, drains and closes the ports, and emits the device on
+  /// [onDeviceDisconnected]. Call it before the program ends (ctrl-C too):
+  /// an open device stays busy for the other programs.
   void disconnect() {
     receivePort?.close();
     errorPort?.close();
@@ -292,10 +348,14 @@ class AlsaMidiDevice {
     connected = false;
   }
 
+  /// `{name, id (the card), type, connected}`, for logs.
   Map<String, Object> get toDictionary {
     return {'name': name, 'id': cardId, 'type': type, 'connected': connected};
   }
 
+  /// The raw MIDI devices of every sound card, the connected ones included
+  /// (the same instances). Synchronous; call it again after a plug or an
+  /// unplug.
   static List<AlsaMidiDevice> getDevices() {
     StreamController<MidiMessage> rxStreamController =
         StreamController<MidiMessage>.broadcast();
@@ -419,5 +479,6 @@ class AlsaMidiDevice {
     return devices;
   }
 
+  /// The ALSA id of a device, `hw:<card>,<device>`.
   static String hardwareId(int card, int device) => 'hw:$card,$device';
 }

@@ -49,11 +49,15 @@ has no relation to the higher level `MidiDeviceManager` abstraction; use
   `{name, id, type, connected}` for logs.
 * `connect()` is async and returns `false` (it does not throw) when the device
   cannot be opened, for example when another process already owns it. Check the
-  result; `connected` then reflects the state. It opens the device in
-  non-blocking mode and spawns a receive isolate.
+  result; `connected` then reflects the state, and a failed `connect` leaves
+  the device as it was (`send` prints, `disconnect` is harmless). It opens the
+  device in non-blocking mode and spawns a receive isolate.
 * `send(Uint8List)` is synchronous and fire and forget: status byte first, e.g.
   `[0x90, 60, 127]` note on, `[0xb0, 0x7f, 0]` control change, a full
   `0xf0 ... 0xf7` block for sysex. Errors are only printed, nothing is thrown.
+  The output is non-blocking and a short write is not retried: a message
+  longer than the free space of the ALSA output buffer (4096 bytes by
+  default, a big sysex dump) is cut.
 * `receivedMessages` is a broadcast `Stream<MidiMessage>` of complete messages
   (the isolate reassembles running messages and sysex up to `0xf7`). The stream
   controller is shared by all devices of one `getDevices()` scan, so filter on
@@ -67,8 +71,8 @@ has no relation to the higher level `MidiDeviceManager` abstraction; use
   `AlsaMidiDevice.onDeviceDisconnected` broadcast stream. Always call it,
   including on `ProcessSignal.sigint`, otherwise the isolate keeps polling and
   the ALSA device stays busy for other applications.
-* Keep only the devices you need connected: each connection runs a busy read
-  loop in its own isolate.
+* Keep only the devices you need connected: each connection runs a read loop
+  (waiting in `poll`) in its own isolate.
 * `MidiMessage` here is a different, concrete class from the abstract
   `MidiMessage` of `tekartik_midi_device`; do not import both libraries
   unprefixed in the same file.
@@ -121,8 +125,14 @@ import 'dart:io';
 import 'package:tekartik_alsa_midi_linux/midi.dart';
 
 Future<void> main() async {
-  var devices = AlsaMidiDevice.getDevices();
-  var device = devices.firstWhere((device) => device.inputPorts.isNotEmpty);
+  var devices = AlsaMidiDevice.getDevices()
+      .where((device) => device.inputPorts.isNotEmpty)
+      .toList();
+  if (devices.isEmpty) {
+    print('no midi input found');
+    return;
+  }
+  var device = devices.first;
   if (!await device.connect()) {
     return;
   }

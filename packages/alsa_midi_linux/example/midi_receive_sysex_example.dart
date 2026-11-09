@@ -20,7 +20,11 @@ void main() async {
   // use first device found
   final device = devices.first;
 
-  await device.connect();
+  if (!await device.connect()) {
+    // Busy in another program, or gone.
+    print('cannot open ${device.toDictionary}');
+    return;
+  }
 
   print(
     'connected to: ${device.toDictionary} \n'
