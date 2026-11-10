@@ -47,17 +47,22 @@ Windows, web) behind the same portable `MidiDeviceManager` API.
   descriptions and background modes. Without them `getDevices()` simply returns
   the non BLE devices.
 * `getDevices()` returns whatever the plugin currently knows; it never scans for
-  BLE devices by itself. For BLE, call `MidiCommand().startBluetooth()` then
-  `startScanningForBluetoothDevices()` from `package:flutter_midi_command`
-  (import it with a prefix, it also declares a `MidiDevice` class), wait a few
-  seconds, then call `getDevices()` again.
-* `connectDevice(id)` throws a plain `Exception` when the id is unknown or when
-  the plugin fails to connect; catch it and show a message. Keep the `id`
-  (plugin device id), not the `MidiDevice` object, in your state.
+  BLE devices by itself. BLE MIDI needs the `flutter_midi_command_ble`
+  transport (flutter_midi_command 1.x): set it once at startup,
+  `MidiCommand(bleTransport: UniversalBleMidiTransport())` (import
+  `package:flutter_midi_command` with a prefix, it also declares a
+  `MidiDevice` class), then `startBluetooth()` and
+  `startScanningForBluetoothDevices()`, wait a few seconds and call
+  `getDevices()` again. Without the transport these calls throw a
+  `StateError`.
+* `connectDevice(id)` waits for the connection (up to 30 s in
+  flutter_midi_command) and throws when the id is unknown or the plugin
+  fails to connect; catch it and show a message. Keep the `id` (plugin device
+  id), not the `MidiDevice` object, in your state.
 * `onMessageReceived` is already filtered on the device and is a broadcast
   stream, so several widgets can listen. It dereferences the plugin's
   `onMidiDataReceived` stream: on a platform where the plugin provides none,
-  the first listen throws; guard with a try/catch on unsupported targets.
+  reading it throws; guard with a try/catch on unsupported targets.
 * `sendData(Uint8List)` routes raw MIDI bytes to that device id
   (`[0x90, note, velocity]` note on, `[0x80, note, 0]` note off,
   `[0xb0, cc, value]` control change). It returns immediately, there is no
@@ -69,10 +74,9 @@ Windows, web) behind the same portable `MidiDeviceManager` API.
   connect the first device whose name matches, reconnect after unplug):
   `start()` in `initState`, `stop()` in `dispose`, and build on
   `service.onDevice` / `service.onMessage`.
-* `midiDeviceManagerFlutterCommandDebug = true` is the public log switch (the
-  example app sets it in `main`); note it is currently a different variable
-  from the internal one the implementation reads, so do not rely on the extra
-  logs appearing.
+* `midiDeviceManagerFlutterCommandDebug = true` is the log switch (the example
+  app sets it in `main`): it prints the devices listed and the connections,
+  and adds `connected` to `toDebugMap()`.
 * Testing: there is no fake backend here. Unit test against your own
   `MidiDeviceManager` fake from `tekartik_midi_device` and keep this package
   only in the composition root of the app.
@@ -82,7 +86,7 @@ Windows, web) behind the same portable `MidiDeviceManager` API.
 ### Device list widget
 
 ```dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tekartik_midi_device_flutter_command/midi_device_flutter_command.dart';
 
 class MidiDeviceListScreen extends StatefulWidget {
@@ -181,7 +185,7 @@ Future<void> playNote(
 ### Auto connect service in a stateful widget
 
 ```dart
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:tekartik_midi_device_flutter_command/midi_device_flutter_command.dart';
 
 class MidiServiceScreen extends StatefulWidget {
@@ -237,21 +241,28 @@ class _MidiServiceScreenState extends State<MidiServiceScreen> {
 ### Scan for BLE MIDI devices before listing
 
 ```dart
+import 'package:flutter/foundation.dart';
 import 'package:flutter_midi_command/flutter_midi_command.dart' as fmc;
 import 'package:tekartik_midi_device_flutter_command/midi_device_flutter_command.dart';
 
 /// Starts a bluetooth scan, then lists what the manager sees.
-Future<List<MidiDevice>> scanAndList(MidiDeviceManager manager) async {
-  var midiCommand = fmc.MidiCommand();
+///
+/// [bleTransport]: `UniversalBleMidiTransport()` of flutter_midi_command_ble
+/// (without a BLE transport the scan calls throw a StateError).
+Future<List<MidiDevice>> scanAndList(
+  MidiDeviceManager manager,
+  fmc.MidiBleTransport bleTransport,
+) async {
+  // The plugin's MidiCommand is a singleton: the manager uses it too.
+  var midiCommand = fmc.MidiCommand(bleTransport: bleTransport);
   try {
     await midiCommand.startBluetooth();
     await midiCommand.startScanningForBluetoothDevices();
     await Future<void>.delayed(const Duration(seconds: 5));
+    midiCommand.stopScanningForBluetoothDevices();
   } catch (e) {
     // Missing permission or no bluetooth: keep the wired devices.
-    print('bluetooth scan failed $e');
-  } finally {
-    midiCommand.stopScanningForBluetoothDevices();
+    debugPrint('bluetooth scan failed $e');
   }
   return manager.getDevices();
 }

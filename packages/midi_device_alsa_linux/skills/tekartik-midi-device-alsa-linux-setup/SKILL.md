@@ -62,10 +62,9 @@ the portable `MidiDeviceManager` API.
 * `MidiDeviceService(manager: midiDeviceManagerAlsaLinux, select: ...)` is the
   usual desktop setup: it polls, auto connects the matching device and
   reconnects after unplug.
-* `midiDeviceManagerAlsaLinuxDebug = true` is the public log switch (the
-  example app sets it at startup); note it is currently a different variable
-  from the internal one the implementation reads, so do not rely on the extra
-  logs appearing.
+* `midiDeviceManagerAlsaLinuxDebug = true` is the log switch (the example app
+  sets it at startup): it prints the devices listed and the connections, and
+  adds `connected` to `toDebugMap()`.
 * Tests: `dart test` with `@TestOn('vm')` plus a `Platform.isLinux` skip, and
   expect zero devices on a CI machine. A non-VM test can only assert that
   touching the getter throws `UnsupportedError` on the web.

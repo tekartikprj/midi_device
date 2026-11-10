@@ -1,4 +1,5 @@
 export 'platform.dart' show midiDeviceManagerAlsaLinux;
 
-/// Turn extra logs
+/// Prints the devices listed and the connections, adds `connected` to
+/// `toDebugMap()` (false by default).
 var midiDeviceManagerAlsaLinuxDebug = false;

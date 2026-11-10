@@ -6,7 +6,8 @@ import 'package:tekartik_common_utils/common_utils_import.dart';
 import 'package:tekartik_common_utils/list_utils.dart';
 import 'package:tekartik_midi_device/midi_device.dart';
 
-/// Turn extra logs
+/// Prints the devices listed and the connections, adds `connected` to
+/// `toDebugMap()` (false by default).
 var midiDeviceManagerFlutterCommandDebug = false;
 
 void _log(Object message) {
@@ -14,7 +15,8 @@ void _log(Object message) {
   print(message);
 }
 
-/// Midi device manager for FLUTTERCOMMAND on Linux
+/// The flutter_midi_command MIDI device manager (Android, iOS, macOS, Linux,
+/// Windows, web): a new one at each access, read it once.
 MidiDeviceManager get midiDeviceManagerFlutterCommand =>
     _MidiDeviceManagerFlutterCommand();
 

@@ -6,8 +6,8 @@ import 'package:tekartik_common_utils/common_utils_import.dart';
 import 'package:tekartik_common_utils/list_utils.dart';
 import 'package:tekartik_midi_device/midi_device.dart';
 
-/// Turn extra logs
-var midiDeviceManagerAlsaLinuxDebug = false;
+// The public switch (was a second variable of the same name, never set).
+import 'device_common.dart' show midiDeviceManagerAlsaLinuxDebug;
 
 void _log(Object message) {
   // ignore: avoid_print
