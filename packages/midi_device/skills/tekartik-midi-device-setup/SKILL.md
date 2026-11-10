@@ -54,15 +54,20 @@ on Flutter).
   parse or build messages; incoming bytes arrive as `MidiMessage.data` with a
   backend specific `timestamp` and the originating `device`.
 * `MidiDeviceService(manager:, select:)` is the auto connect loop: call
-  `start()` once, it polls `getDevices()`, keeps the first device matching
-  `select` connected, re-scans every 5 seconds and after each disconnection,
-  and `stop()` disconnects. `select` is a `MidiDeviceSelectFunction`
+  `start()` once, it polls `getDevices()` and connects the first device
+  matching `select`. When that one is unplugged it tries the next matching
+  device of the same list (no new scan), then emits `null` and scans again
+  every 5 seconds until one is found. `stop()` disconnects it, and nothing is
+  connected after a `stop()`, even one called while the devices were being
+  listed. `select` is a `MidiDeviceSelectFunction`
   (`bool Function(MidiDevice)`), typically a name match.
 * `service.onDevice` is a `ValueStream<ConnectedMidiDevice?>` (rxdart, through
-  `tekartik_app_rx`): `null` means currently not connected. Read the current
-  value with `valueOrNull` (`value` throws before the first event) and listen
-  for changes. `service.onMessage` flattens the messages of whichever device is
-  connected, so UI code never has to re-subscribe.
+  `tekartik_app_rx`): `null` means currently not connected (emitted again at
+  each empty scan). Read the current value with `valueOrNull` (`value` throws
+  before the first scan ended) and listen for changes. `service.onMessage`
+  flattens the messages of whichever device is connected, so UI code never
+  has to re-subscribe; it follows a new device a few microtasks after
+  `onDevice` gave it (a message sent back at once can be missed).
 * One `MidiDeviceService` per selection: it holds a single connection, not a
   list. To drive several devices at once, use `manager.connectDevice()`
   directly per device.
@@ -71,6 +76,11 @@ on Flutter).
   assuming `getDevices()` is cheap or synchronous, or importing the
   implementation package from shared code instead of taking a
   `MidiDeviceManager` parameter.
+* Implementation packages: `tekartik_midi_device_alsa_linux`
+  (`midiDeviceManagerAlsaLinux`, Linux) and
+  `tekartik_midi_device_flutter_command` (`midiDeviceManagerFlutterCommand`,
+  Flutter), in the same repository. `example/main.dart` runs the API and the
+  service on an in-memory echo device.
 * Tests: implement the four interfaces in memory (see the last example) and
   inject that manager; no platform MIDI backend is needed.
 

@@ -59,11 +59,19 @@ class MidiDeviceService {
             // If there are selected devices, connect to the first one
             if (devices.isNotEmpty) {
               for (var device in devices) {
-                late ConnectedMidiDevice connectedDevice;
-                await _lock.synchronized(() async {
-                  connectedDevice = await manager.connectDevice(device.id);
+                var connectedDevice = await _lock.synchronized(() async {
+                  // Stopped while listing, or after the disconnection that
+                  // stop() caused: no connection.
+                  if (!_started) {
+                    return null;
+                  }
+                  var connectedDevice = await manager.connectDevice(device.id);
                   _subject.add(connectedDevice);
+                  return connectedDevice;
                 });
+                if (connectedDevice == null) {
+                  break;
+                }
                 // Check if the device is already connected
                 await connectedDevice.onDisconnected;
               }
@@ -93,7 +101,8 @@ class MidiDeviceService {
     _started = false;
 
     _lock.synchronized(() async {
-      var connectedDevice = _subject.value;
+      // No value before the first connection attempt.
+      var connectedDevice = _subject.valueOrNull;
       await connectedDevice?.disconnect();
     });
   }
